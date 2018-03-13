@@ -34,6 +34,7 @@ import org.deeplearning4j.nn.conf.inputs.InputType;
 import org.deeplearning4j.nn.conf.layers.*;
 import org.deeplearning4j.nn.conf.layers.misc.FrozenLayer;
 import org.deeplearning4j.nn.conf.layers.recurrent.Bidirectional;
+import org.deeplearning4j.nn.conf.layers.samediff.BaseSameDiffLayer;
 import org.deeplearning4j.nn.conf.layers.variational.ReconstructionDistribution;
 import org.deeplearning4j.nn.conf.layers.wrapper.BaseWrapperLayer;
 import org.deeplearning4j.nn.conf.serde.ComputationGraphConfigurationDeserializer;
@@ -49,6 +50,7 @@ import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.learning.config.IUpdater;
 import org.nd4j.linalg.learning.config.Sgd;
 import org.nd4j.linalg.lossfunctions.ILossFunction;
+import org.nd4j.shade.jackson.annotation.JsonAutoDetect;
 import org.nd4j.shade.jackson.databind.*;
 import org.nd4j.shade.jackson.databind.deser.BeanDeserializerModifier;
 import org.nd4j.shade.jackson.databind.introspect.AnnotatedClass;
@@ -607,6 +609,7 @@ public class NeuralNetConfiguration implements Serializable, Cloneable {
         protected CacheMode cacheMode = CacheMode.NONE;
 
         protected ConvolutionMode convolutionMode = ConvolutionMode.Truncate;
+        protected ConvolutionLayer.AlgoMode cudnnAlgoMode = ConvolutionLayer.AlgoMode.PREFER_FASTEST;
 
         public Builder() {
             //
@@ -1009,6 +1012,16 @@ public class NeuralNetConfiguration implements Serializable, Cloneable {
         }
 
         /**
+         * Sets the cuDNN algo mode for convolutional layers, which impacts performance and memory usage of cuDNN.
+         * See {@link ConvolutionLayer.AlgoMode} for details.  Defaults to "PREFER_FASTEST", but "NO_WORKSPACE" uses less memory.
+         * @param cudnnAlgoMode cuDNN algo mode to use
+         */
+        public Builder cudnnAlgoMode(ConvolutionLayer.AlgoMode cudnnAlgoMode) {
+            this.cudnnAlgoMode = cudnnAlgoMode;
+            return this;
+        }
+
+        /**
          * Set constraints to be applied to all layers. Default: no constraints.<br>
          * Constraints can be used to enforce certain conditions (non-negativity of parameters, max-norm regularization,
          * etc). These constraints are applied at each iteration, after the parameters have been updated.
@@ -1077,6 +1090,11 @@ public class NeuralNetConfiguration implements Serializable, Cloneable {
             else
                 layerName = layer.getLayerName();
 
+            if(layer instanceof BaseSameDiffLayer){
+                BaseSameDiffLayer sdl = (BaseSameDiffLayer)layer;
+                sdl.applyGlobalConfig(this);
+            }
+
             if (layer != null) {
                 copyConfigToLayer(layerName, layer);
             }
@@ -1100,6 +1118,9 @@ public class NeuralNetConfiguration implements Serializable, Cloneable {
                 ConvolutionLayer cl = (ConvolutionLayer) layer;
                 if (cl.getConvolutionMode() == null) {
                     cl.setConvolutionMode(convolutionMode);
+                }
+                if (cl.getCudnnAlgoMode() == null) {
+                    cl.setCudnnAlgoMode(cudnnAlgoMode);
                 }
             }
             if (layer instanceof SubsamplingLayer) {
